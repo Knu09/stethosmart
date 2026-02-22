@@ -97,6 +97,8 @@ def extract_features(file_path: str) -> np.ndarray:
 
 
 # Sample extraction
-features = extract_features("./../../Audio Files/BP30_N,N,P R M,18,F.wav")
+features = extract_features(
+    "../../dataset/ICBHI_final_database/102_1b1_Ar_sc_Meditron.wav"
+)
 print(features)
 plot_stacked_feature(features)
