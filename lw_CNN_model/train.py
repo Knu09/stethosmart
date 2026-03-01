@@ -112,7 +112,7 @@ def main():
         ]
     )
     total_samples = sum(class_counts)
-    print(f"Total samples: {total_samples}")
+    print(f"Total train samples: {total_samples}")
 
     class_weights = torch.tensor(
         [total_samples / c for c in class_counts], dtype=torch.float
@@ -129,7 +129,6 @@ def main():
     test_accuracies = []
     print("Starting the training loop...")
     for epoch in range(EPOCHS):
-        print(f"Training epoch [{epoch + 1}]")
         model.train()
         running_loss = 0
         correct = 0
@@ -241,5 +240,7 @@ def main():
 
 
 if __name__ == "__main__":
+    main()
+    main()
     main()
     main()
