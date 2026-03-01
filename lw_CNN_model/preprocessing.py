@@ -41,6 +41,7 @@ def load_icbhi_splits(split_file: str):
                 else:
                     test_subjs.append(subj)
 
+    print("ICBHI train and test split completed.\n")
     return train_subjs, test_subjs
 
 
@@ -48,14 +49,18 @@ def load_icbhi_splits(split_file: str):
 # Load Diagnosis Labels
 # -----------------------
 def load_icbhi_labels(label_file: str):
+
+    print("Loading ICBHI labels split...")
     diag_map = {}
     with open(label_file) as f:
         for line in f:
+            print(f"Splitting: {line}")
             parts = line.strip().split()
             if len(parts) == 2:
                 subj, diag = parts
                 diag_map[subj] = diag.lower()
 
+    print("ICBHI labels split completed.\n")
     return diag_map
 
 
@@ -66,6 +71,7 @@ def build_file_list(root, train_subjs, test_subjs, diag_map):
     train_files = []
     test_files = []
 
+    print("Building file list for paths and labels...")
     for file in os.listdir(root):
         if file.endswith(".wav"):
             recording_id = file.replace(".wav", "")
@@ -82,6 +88,7 @@ def build_file_list(root, train_subjs, test_subjs, diag_map):
             elif recording_id in test_subjs:
                 test_files.append((full_path, label))
 
+    print("Build file list for train and test completed.\n")
     return train_files, test_files
 
 
@@ -102,6 +109,7 @@ def segment_cycles(wav_path: str, sr: int = 16000) -> List[Dict]:
 
     txt_path = wav_path.replace(".wav", ".txt")
     y, _ = librosa.load(wav_path, sr=sr)
+    print(f"Load audio: \tPATH: {wav_path}\tSR: {sr}")
 
     segments = []
 
@@ -131,13 +139,18 @@ def segment_cycles(wav_path: str, sr: int = 16000) -> List[Dict]:
 
             # Apply bandpass filter
             cycle_audio = apply_bandpass(cycle_audio, sr)
+            print(f"Applied bandpass to file: {line}")
 
             # Normalize amplitude safely
             max_val = np.max(np.abs(cycle_audio))
             if max_val > 0:
                 cycle_audio = cycle_audio / max_val
+            print(f"Normalize the applitude to file: {line}")
 
             segments.append(cycle_audio.astype(np.float32))
+
+    print(f"Segment length: {len(segments)}")
+    print("Segment cycles completed.\n")
     return segments
 
 
@@ -148,16 +161,21 @@ def build_cycle_dataset(file_list):
     X = []  # independent variable
     y = []  # dependent variable
 
+    print("Building cycle-level dataset...")
     for wav_path, label_name in file_list:
+        print(f"Segmented the cycles of file: {wav_path}")
         cycles = segment_cycles(wav_path)
 
         # Only include labels in label_map
         if label_name not in label_map:
+            print(f"Excluded label: {label_name}")
             continue
 
         for cycle in cycles:
             X.append(cycle)
             y.append(label_map[label_name])
+
+    print("Cycle-Level build completed.\n")
     return X, y
 
 
@@ -233,8 +251,7 @@ def resize_feature(feature: np.ndarray, target_height: int) -> np.ndarray:
 def extract_features(
     y, sr=16000, n_mels=128, n_mfcc=40, hop_length=512, target_width=216
 ) -> np.ndarray:
-
-    y, sr = librosa.load(y, sr=sr)
+    # y, sr = librosa.load(y, sr=sr)
 
     # Mel spectrogram
     mel_spec = librosa.feature.melspectrogram(
@@ -264,7 +281,7 @@ def extract_features(
     )
 
     print(f"Final Shape: {stacked.shape}")
-    print(f"Feature Stacked: {stacked}")
+    # print(f"Feature Stacked: {stacked}")
     return stacked
 
 
