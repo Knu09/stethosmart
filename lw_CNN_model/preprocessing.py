@@ -5,6 +5,7 @@ from numpy.typing import NDArray
 from scipy.signal import butter, sosfiltfilt
 import matplotlib.pyplot as plt
 import numpy as np
+import cv2
 from typing import List, Dict
 
 # Parameters
@@ -150,6 +151,10 @@ def build_cycle_dataset(file_list):
     for wav_path, label_name in file_list:
         cycles = segment_cycles(wav_path)
 
+        # Only include labels in label_map
+        if label_name not in label_map:
+            continue
+
         for cycle in cycles:
             X.append(cycle)
             y.append(label_map[label_name])
@@ -229,6 +234,8 @@ def extract_features(
     y, sr=16000, n_mels=128, n_mfcc=40, hop_length=512, target_width=216
 ) -> np.ndarray:
 
+    y, sr = librosa.load(y, sr=sr)
+
     # Mel spectrogram
     mel_spec = librosa.feature.melspectrogram(
         y=y, sr=sr, n_mels=n_mels, hop_length=hop_length
@@ -240,28 +247,21 @@ def extract_features(
 
     # MFCC
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc, hop_length=hop_length)
-    print(f"Mel Spec DB Shape: {mel_spec_db.shape}")
-    print(f"Chroma Shape: {chroma.shape}")
-    print(f"MFCC Shape: {mfcc.shape}")
 
-    # Resize to 128 rows
-    chroma_resized = resize_feature(chroma, n_mels)
-    mfcc_resize = resize_feature(mfcc, n_mels)
+    # Resize all to (128, 216)
+    mel_resized = cv2.resize(mel_spec_db, (target_width, n_mels))
+    chroma_resized = cv2.resize(chroma, (target_width, n_mels))
+    mfcc_resize = cv2.resize(mfcc, (target_width, n_mels))
 
-    # Resize to same time dimension
-    min_time = min(
-        mel_spec_db.shape[1],
-        chroma.shape[1],
-        mfcc.shape[1],
-    )
-
-    mel_spec_db = mel_spec_db[:, :min_time]
-    chroma = chroma_resized[:, :min_time]
-    mfcc = mfcc_resize[:, :min_time]
+    print(f"Mel Spec DB Shape: {mel_resized.shape}")
+    print(f"Chroma Shape: {chroma_resized.shape}")
+    print(f"MFCC Shape: {mfcc_resize.shape}")
 
     # Resize or pad all features
-    # (ensure same shape for all, e.g., mel: (128,216), chroma: (12,216), mfcc: (40,216))
-    stacked = np.stack([mel_spec_db, chroma_resized, mfcc_resize], axis=0)
+    # (ensure same shape for all e.g. (3,128,216))
+    stacked = np.stack([mel_resized, chroma_resized, mfcc_resize], axis=0).astype(
+        np.float32
+    )
 
     print(f"Final Shape: {stacked.shape}")
     print(f"Feature Stacked: {stacked}")
@@ -270,7 +270,7 @@ def extract_features(
 
 # # Sample extraction
 # features = extract_features(
-#     "../../dataset/ICBHI_final_database/102_1b1_Ar_sc_Meditron.wav"
+#     "../../dataset/ICBHI_final_database/104_1b1_Al_sc_Litt3200.wav"
 # )
 # print(features)
 # plot_stacked_feature(features)
