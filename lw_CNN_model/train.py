@@ -62,6 +62,14 @@ def main():
     X_test = torch.tensor(np.array(test_features)).float()
     y_test = torch.tensor(test_labels).long()
 
+    # Normalization
+    # This improves training stability significantly.
+    mean = X_train.mean()
+    std = X_train.std()
+
+    X_train = (X_train - mean) / (std + 1e-8)
+    X_test = (X_test - mean) / (std + 1e-8)
+
     # -----------------------
     # Dataset + Loader
     # -----------------------
