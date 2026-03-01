@@ -18,6 +18,7 @@ from typing import List, Dict
 from numpy.typing import NDArray
 
 import matplotlib.pyplot as plt
+import json
 
 # import random
 # import torch
@@ -197,6 +198,10 @@ def main():
     plt.title("Training vs Test Accuracy")
     plt.legend()
     plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+    plt.savefig("accuracy_plot.png", dpi=300)
+    plt.close()
 
     # Loss plot
     plt.subplot(1, 2, 2)
@@ -209,6 +214,18 @@ def main():
 
     plt.tight_layout()
     plt.show()
+    plt.tight_layout()
+    plt.savefig("loss_plot.png", dpi=300)
+    plt.close()
+
+    metrics = {
+        "train_loss": train_losses,
+        "train_acc": train_accuracies,
+        "test_acc": test_accuracies,
+    }
+
+    with open("training_metrics.json", "w") as f:
+        json.dump(metrics, f)
 
     # total_cycles = 0
     # for file, label in train_files:
@@ -224,4 +241,5 @@ def main():
 
 
 if __name__ == "__main__":
+    main()
     main()
