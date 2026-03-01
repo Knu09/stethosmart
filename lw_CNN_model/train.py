@@ -184,6 +184,31 @@ def main():
     # Save model
     torch.save(model.state_dict(), "lung_model.pth")
     print("Model saved!")
+    epochs = range(1, EPOCHS + 1)
+
+    plt.figure(figsize=(14, 5))
+
+    # Accuracy plot
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_accuracies, label="Train Accuracy")
+    plt.plot(epochs, test_accuracies, label="Test Accuracy")
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy (%)")
+    plt.title("Training vs Test Accuracy")
+    plt.legend()
+    plt.grid(True)
+
+    # Loss plot
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, train_losses, label="Training Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Training Loss")
+    plt.legend()
+    plt.grid(True)
+
+    plt.tight_layout()
+    plt.show()
 
     # total_cycles = 0
     # for file, label in train_files:
