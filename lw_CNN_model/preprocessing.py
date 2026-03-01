@@ -225,9 +225,9 @@ def resize_feature(feature: np.ndarray, target_height: int) -> np.ndarray:
     )
 
 
-def extract_features(y, sr=16000) -> np.ndarray:
-    # pad/trim to fixed length
-    y = librosa.util.fix_length(y, size=int(sr * duration))
+def extract_features(
+    y, sr=16000, n_mels=128, n_mfcc=40, hop_length=512, target_width=216
+) -> np.ndarray:
 
     # Mel spectrogram
     mel_spec = librosa.feature.melspectrogram(
