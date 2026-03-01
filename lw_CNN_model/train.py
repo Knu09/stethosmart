@@ -1,6 +1,15 @@
 import os
-
 from torch import full
+import numpy as np
+import librosa
+from preprocessing import (
+    segment_cycles,
+    load_icbhi_splits,
+    load_icbhi_labels,
+    build_file_list,
+)
+from typing import List, Dict
+from numpy.typing import NDArray
 
 # import random
 # import torch
@@ -12,96 +21,38 @@ from torch import full
 # -----------------------
 # CONFIG
 # -----------------------
-DATASET_PATH = "../../dataset/ICBHI_final_database/"
 BATCH_SIZE = 16
 EPOCHS = 100
 LR = 1e-4
 
-
-# Label encoding
-label_map = {
-    "normal": 0,
-    "copd": 1,
-    "asthma": 2,
-    "pneumonia": 3,
-}
-
-
 # -----------------------
-# Parse Official Split
+# PATHS
 # -----------------------
+ICBHI_SPLITS_PATH = "../distributions/ICBHI_challenge_train_test_split.txt"
+ICBHI_DIAGNOSIS_PATH = "../distributions/ICBHI_challenge_diagnosis.txt"
+ICBHI_DATASET_PATH = "../../dataset/ICBHI_final_database/"
 
 
-def load_icbhi_splits(split_file: str):
-    train_subjs = []
-    test_subjs = []
+def main():
+    train_subjs, test_subjs = load_icbhi_splits(ICBHI_SPLITS_PATH)
 
-    with open(split_file) as f:
-        for line in f:
-            parts = line.strip().split()
-            if len(parts) == 2:
-                subj, flag = parts
-                if flag == "train":
-                    train_subjs.append(subj)
-                else:
-                    test_subjs.append(subj)
+    train_subjs, test_subjs = load_icbhi_splits(ICBHI_SPLITS_PATH)
+    diag_map = load_icbhi_labels(ICBHI_DIAGNOSIS_PATH)
+    train_files, test_files = build_file_list(
+        ICBHI_DATASET_PATH, train_subjs, test_subjs, diag_map
+    )
 
-    return train_subjs, test_subjs
+    total_cycles = 0
+    for file, label in train_files:
+        print(f"File Path: {file}")
+        print(f"Label: {label}")
+        cycles = segment_cycles(file)
+        print(f"Length of cycles: {len(cycles)}")
 
+        if cycles is not None:
+            total_cycles += len(cycles)
 
-train_subjs, test_subjs = load_icbhi_splits(
-    "../distributions/ICBHI_challenge_train_test_split.txt"
-)
-
-# Load Diagnosis Labels
-
-
-def load_icbhi_labels(label_file: str):
-    diag_map = {}
-    with open(label_file) as f:
-        for line in f:
-            parts = line.strip().split()
-            if len(parts) == 2:
-                subj, diag = parts
-                diag_map[subj] = diag.lower()
-
-    return diag_map
-
-
-# Build File List using those Splits
-def build_file_list(root, train_subjs, test_subjs, diag_map):
-    train_files = []
-    test_files = []
-
-    for file in os.listdir(root):
-        if file.endswith(".wav"):
-            recording_id = file.replace(".wav", "")
-            patient_id = recording_id.split("_")[0]
-
-            label = diag_map.get(patient_id, None)
-            if label is None:
-                continue
-
-            full_path = os.path.join(root, file)
-
-            if recording_id in train_subjs:
-                train_files.append((full_path, label))
-            elif recording_id in test_subjs:
-                test_files.append((full_path, label))
-
-    return train_files, test_files
-
-
-train_subjs, test_subjs = load_icbhi_splits(
-    "../distributions/ICBHI_challenge_train_test_split.txt"
-)
-diag_map = load_icbhi_labels("../distributions/ICBHI_challenge_diagnosis.txt")
-train_files, test_files = build_file_list(
-    "../../dataset/ICBHI_final_database/", train_subjs, test_subjs, diag_map
-)
-
-# for file in test_files:
-#     print(file)
+    print(f"Total lenght of cycles: {total_cycles}")
 
 
 # -----------------------
@@ -182,3 +133,6 @@ train_files, test_files = build_file_list(
 # # Save model
 # torch.save(model.state_dict(), "lung_model.pth")
 # print("Model saved!")
+
+if __name__ == "__main__":
+    main()
