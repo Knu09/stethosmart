@@ -1,3 +1,4 @@
+import os
 import librosa
 import numpy as np
 from numpy.typing import NDArray
@@ -6,6 +7,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from typing import List, Dict
 
+# CONFIG
+DATASET_PATH = "../../dataset/ICBHI_final_database/"
+
 # Parameters
 sr = 22050  # sampling rate
 duration = 5.0  # seconds
@@ -13,14 +17,89 @@ n_mels = 128
 n_mfcc = 40
 hop_length = 512
 
+# Label encoding
+label_map = {
+    "normal": 0,
+    "copd": 1,
+    "asthma": 2,
+    "pneumonia": 3,
+}
 
-def segment_cycles(wav_path: str, sr: int = 22050) -> List[Dict]:
+
+# -----------------------
+# Parse Official Split
+# -----------------------
+def load_icbhi_splits(split_file: str):
+    train_subjs = []
+    test_subjs = []
+
+    with open(split_file) as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) == 2:
+                subj, flag = parts
+                if flag == "train":
+                    train_subjs.append(subj)
+                else:
+                    test_subjs.append(subj)
+
+    return train_subjs, test_subjs
+
+
+# -----------------------
+# Load Diagnosis Labels
+# -----------------------
+def load_icbhi_labels(label_file: str):
+    diag_map = {}
+    with open(label_file) as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) == 2:
+                subj, diag = parts
+                diag_map[subj] = diag.lower()
+
+    return diag_map
+
+
+# -----------------------
+# Build File List using those Splits
+# -----------------------
+def build_file_list(root, train_subjs, test_subjs, diag_map):
+    train_files = []
+    test_files = []
+
+    for file in os.listdir(root):
+        if file.endswith(".wav"):
+            recording_id = file.replace(".wav", "")
+            patient_id = recording_id.split("_")[0]
+
+            label = diag_map.get(patient_id, None)
+            if label is None:
+                continue
+
+            full_path = os.path.join(root, file)
+
+            if recording_id in train_subjs:
+                train_files.append((full_path, label))
+            elif recording_id in test_subjs:
+                test_files.append((full_path, label))
+
+    return train_files, test_files
+
+
+# -----------------------
+# Segment Into Cycles
+# -----------------------
+def segment_cycles(wav_path: str, sr: int = 16000) -> List[Dict]:
     """
     Segment a respiratory recording into cycles using annotation file.
+    The parameters contains:
+        - wav_path: Wave path
+        - sr: Sampling rate (for medical respiratory sounds most papers use 16 KHz)
     Returns a list of dictionaries containing:
         - audio segment
-        - crackle label
-        - wheeze label
+        # - crackle label
+        # - wheeze label
     """
 
     txt_path = wav_path.replace(".wav", ".txt")
@@ -34,8 +113,9 @@ def segment_cycles(wav_path: str, sr: int = 22050) -> List[Dict]:
 
             start = float(start)
             end = float(end)
-            crackle = int(crackle)
-            wheeze = int(wheeze)
+            # NOTE: For multi-task learning (advanced)
+            # crackle = int(crackle)
+            # wheeze = int(wheeze)
 
             start_sample = int(start * sr)
             end_sample = int(end * sr)
@@ -46,10 +126,37 @@ def segment_cycles(wav_path: str, sr: int = 22050) -> List[Dict]:
             if len(cycle_audio) < sr:
                 continue
 
-            segments.append(
-                {"audio": cycle_audio, "crackle": crackle, "wheeze": wheeze}
-            )
+            # NOTE: For multi-task learning (advanced)
+            # segments.append(
+            #     {"audio": cycle_audio, "crackle": crackle, "wheeze": wheeze}
+            # )
+
+            # Apply bandpass filter
+            cycle_audio = apply_bandpass(cycle_audio, sr)
+
+            # Normalize amplitude safely
+            max_val = np.max(np.abs(cycle_audio))
+            if max_val > 0:
+                cycle_audio = cycle_audio / max_val
+
+            segments.append(cycle_audio.astype(np.float32))
     return segments
+
+
+# -----------------------
+# Build Cycle-Level Dataset
+# -----------------------
+def build_cycle_dataset(file_list):
+    X = []  # independent variable
+    y = []  # dependent variable
+
+    for wav_path, label_name in file_list:
+        cycles = segment_cycles(wav_path)
+
+        for cycle in cycles:
+            X.append(cycle)
+            y.append(label_map[label_name])
+    return X, y
 
 
 def apply_bandpass(
@@ -121,10 +228,7 @@ def resize_feature(feature: np.ndarray, target_height: int) -> np.ndarray:
     )
 
 
-def extract_features(file_path: str) -> np.ndarray:
-    # Load audio
-    y, _ = librosa.load(path=file_path, sr=sr)
-
+def extract_features(y, sr=16000) -> np.ndarray:
     # pad/trim to fixed length
     y = librosa.util.fix_length(y, size=int(sr * duration))
 
@@ -167,9 +271,9 @@ def extract_features(file_path: str) -> np.ndarray:
     return stacked
 
 
-# Sample extraction
-features = extract_features(
-    "../../dataset/ICBHI_final_database/102_1b1_Ar_sc_Meditron.wav"
-)
-print(features)
-plot_stacked_feature(features)
+# # Sample extraction
+# features = extract_features(
+#     "../../dataset/ICBHI_final_database/102_1b1_Ar_sc_Meditron.wav"
+# )
+# print(features)
+# plot_stacked_feature(features)
