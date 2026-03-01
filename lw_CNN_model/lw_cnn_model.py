@@ -65,6 +65,7 @@ class LungSoundCNN(nn.Module):
     def forward(self, x):
 
         # Input: (batch, 3, 128, 216)
+        # CNN expects (batch_size, channels, height, width)
 
         x = F.relu(self.bn1(self.conv1(x)))  # (B,32,128,216)
 
