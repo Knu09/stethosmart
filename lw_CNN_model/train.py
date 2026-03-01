@@ -4,6 +4,7 @@ from torch import full
 from torch.utils.data import TensorDataset, DataLoader
 from lw_cnn_model import LungSoundCNN
 
+from collections import Counter
 import numpy as np
 from preprocessing import (
     segment_cycles,
@@ -15,6 +16,8 @@ from preprocessing import (
 )
 from typing import List, Dict
 from numpy.typing import NDArray
+
+import matplotlib.pyplot as plt
 
 # import random
 # import torch
@@ -52,8 +55,19 @@ def main():
     test_audio, test_labels = build_cycle_dataset(test_files)
 
     # Extract train and test features
-    train_features = [extract_features(c) for c in train_audio]
-    test_features = [extract_features(c) for c in test_audio]
+    print("Feature extracting the train and test independent features...")
+
+    train_features = []
+    for i, c in enumerate(train_audio):
+        print(f"[TRAIN {i + 1}/{len(train_audio)}] Extracting: {c}")
+        train_features.append(extract_features(c))
+
+    test_features = []
+    for i, c in enumerate(test_audio):
+        print(f"[TEST {i + 1}/{len(test_audio)}] Extracting: {c}")
+        test_features.append(extract_features(c))
+
+    print("Feature extraction completed.\n")
 
     # Convert to tensors
     X_train = torch.tensor(np.array(train_features)).float()
@@ -86,13 +100,35 @@ def main():
 
     model = LungSoundCNN(num_classes=4).to(device)
 
-    criterion = nn.CrossEntropyLoss()
+    # Class imbalance
+    class_counts = Counter(train_labels)
+    total_samples = sum(class_counts.values())
+
+    class_counts = np.array(
+        [
+            train_labels.count(i) if train_labels.count(i) > 0 else 1  # avoid zero
+            for i in range(4)
+        ]
+    )
+    total_samples = sum(class_counts)
+    print(f"Total samples: {total_samples}")
+
+    class_weights = torch.tensor(
+        [total_samples / c for c in class_counts], dtype=torch.float
+    )
+
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
     # -----------------------
     # TRAIN LOOP (100 EPOCHS)
     # -----------------------
+    train_losses = []
+    train_accuracies = []
+    test_accuracies = []
+    print("Starting the training loop...")
     for epoch in range(EPOCHS):
+        print(f"Training epoch [{epoch + 1}]")
         model.train()
         running_loss = 0
         correct = 0
@@ -133,6 +169,10 @@ def main():
                 test_correct += (predicted == y).sum().item()
 
         test_acc = 100 * test_correct / test_total
+
+        train_losses.append(running_loss)
+        train_accuracies.append(train_acc)
+        test_accuracies.append(test_acc)
 
         print(
             f"Epoch [{epoch + 1}/{EPOCHS}] "
