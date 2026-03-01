@@ -56,10 +56,10 @@ def main():
     test_features = [extract_features(c) for c in test_audio]
 
     # Convert to tensors
-    X_train = torch.tensor(np.array(train_features)).unsqueeze(1).float()
+    X_train = torch.tensor(np.array(train_features)).float()
     y_train = torch.tensor(train_labels).long()
 
-    X_test = torch.tensor(np.array(test_features)).unsqueeze(1).float()
+    X_test = torch.tensor(np.array(test_features)).float()
     y_test = torch.tensor(test_labels).long()
 
     # -----------------------
