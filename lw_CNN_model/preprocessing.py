@@ -7,9 +7,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from typing import List, Dict
 
-# CONFIG
-DATASET_PATH = "../../dataset/ICBHI_final_database/"
-
 # Parameters
 sr = 22050  # sampling rate
 duration = 5.0  # seconds
