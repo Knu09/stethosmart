@@ -115,7 +115,7 @@ def main():
     print(f"Total train samples: {total_samples}")
 
     class_weights = torch.tensor(
-        [total_samples / c for c in class_counts], dtype=torch.float
+        [total_samples / c for c in class_counts], dtype=torch.float, device=device
     )
 
     criterion = nn.CrossEntropyLoss(weight=class_weights)
@@ -240,7 +240,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
-    main()
-    main()
     main()
