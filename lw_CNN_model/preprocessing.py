@@ -17,7 +17,7 @@ hop_length = 512
 
 # Label encoding
 label_map = {
-    "normal": 0,
+    "healthy": 0,
     "copd": 1,
     "asthma": 2,
     "pneumonia": 3,
@@ -270,9 +270,9 @@ def extract_features(
     chroma_resized = cv2.resize(chroma, (target_width, n_mels))
     mfcc_resize = cv2.resize(mfcc, (target_width, n_mels))
 
-    print(f"Mel Spec DB Shape: {mel_resized.shape}")
-    print(f"Chroma Shape: {chroma_resized.shape}")
-    print(f"MFCC Shape: {mfcc_resize.shape}")
+    # print(f"Mel Spec DB Shape: {mel_resized.shape}")
+    # print(f"Chroma Shape: {chroma_resized.shape}")
+    # print(f"MFCC Shape: {mfcc_resize.shape}")
 
     # Resize or pad all features
     # (ensure same shape for all e.g. (3,128,216))
@@ -280,7 +280,7 @@ def extract_features(
         np.float32
     )
 
-    print(f"Final Shape: {stacked.shape}")
+    # print(f"Final Shape: {stacked.shape}")
     # print(f"Feature Stacked: {stacked}")
     return stacked
 
