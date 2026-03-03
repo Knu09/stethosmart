@@ -42,7 +42,7 @@ class LungSoundCNN(nn.Module):
         super().__init__()
 
         # Initial convolution
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(2, 32, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(32)
 
         # Inception Blocks
