@@ -55,6 +55,9 @@ def main():
     train_audio, train_labels = build_cycle_dataset(train_files)
     test_audio, test_labels = build_cycle_dataset(test_files)
 
+    # print("Train distribution:", Counter(train_labels))
+    # print("Test distribution:", Counter(test_labels))
+
     # Extract train and test features
     print("Feature extracting the train and test independent features...")
 
