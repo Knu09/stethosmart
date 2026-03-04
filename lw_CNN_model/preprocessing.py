@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 from typing import List, Dict
+import random
+from collections import defaultdict
 
 # Parameters
 sr = 22050  # sampling rate
@@ -22,6 +24,46 @@ label_map = {
     "asthma": 2,
     "pneumonia": 3,
 }
+
+# -----------------------
+# LABELS
+# -----------------------
+VALID_LABELS = {"healthy", "asthma", "pneumonia", "copd"}
+
+
+# -----------------------
+# KAUH labels map
+# -----------------------
+LABEL_MAP = {
+    "n": "healthy",
+    "asthma": "asthma",
+    "copd": "copd",
+    "pneumonia": "pneumonia",
+}
+
+
+# -------------------------------------------------
+# Parse KAUH Diagnosis from filename
+# -------------------------------------------------
+def parse_data_label(filename: str):
+    """
+    Example: BP1_Asthma,I E W,P L L,70,M.wav
+             101_1b1_Al_sc_Meditron.wav
+    """
+    name = filename.replace(".wav", "")
+    parts = name.split("_")
+
+    if len(parts) < 2:
+        return None
+
+    diagnosis_part = parts[1]
+    diagnosis = diagnosis_part.split(",")[0].strip().lower()
+
+    mapped_label = LABEL_MAP.get(diagnosis)
+    if mapped_label not in VALID_LABELS:
+        return None
+
+    return mapped_label
 
 
 # -----------------------
@@ -46,6 +88,43 @@ def load_icbhi_splits(split_file: str):
 
 
 # -----------------------
+# Inject ICBHI Diagnosis
+# -----------------------
+def inject_icbhi_diagnosis(diag_map: Dict[str, str], dataset_path):
+    """
+    Example: 101_1b1_Al_sc_Meditron.wav
+    """
+    for file in os.listdir(dataset_path):
+        if not file.endswith(".wav"):
+            continue
+
+        parts = file.split("_")
+        subject_id = parts[0]
+
+        if subject_id not in diag_map:
+            print(f"No diagnosis found for {file}")
+            continue
+
+        diagnosis = diag_map[subject_id]
+
+        # Prevent double renaming
+        if diagnosis.lower() in file.lower():
+            print(f"Skip renaming {file}")
+            continue
+
+        new_filename = f"{subject_id}_{diagnosis}_{'_'.join(parts[1:])}"
+
+        old_path = os.path.join(dataset_path, file)
+        new_path = os.path.join(dataset_path, new_filename)
+
+        os.rename(old_path, new_path)
+
+        print(f"Renamed: {file} -> {new_filename}")
+
+    print("\nICBHI filename formatting completed.")
+
+
+# -----------------------
 # Load Diagnosis Labels
 # -----------------------
 def load_icbhi_labels(label_file: str):
@@ -54,7 +133,6 @@ def load_icbhi_labels(label_file: str):
     diag_map = {}
     with open(label_file) as f:
         for line in f:
-            print(f"Splitting: {line}")
             parts = line.strip().split()
             if len(parts) == 2:
                 subj, diag = parts
@@ -93,8 +171,68 @@ def build_file_list(root, train_subjs, test_subjs, diag_map):
 
 
 # -----------------------
-# Segment Into Cycles
+# Process Dataset
 # -----------------------
+def process_dataset(root_path, file_label_getter):
+    """
+    Generic dataset processor.
+    file_label_getter(file) -> returns label string or None
+    """
+    segments_list = []
+    labels_list = []
+
+    for file in os.listdir(root_path):
+        if not file.endswith(".wav"):
+            continue
+
+        label = file_label_getter(file)
+        if label not in VALID_LABELS:
+            continue
+
+        full_path = os.path.join(root_path, file)
+
+        segments = segmentation(full_path, sr=16000, window_length=5, hop_length=2.5)
+
+        for seg in segments:
+            segments_list.append(seg)
+            labels_list.append(label)
+
+    return segments_list, labels_list
+
+
+# -----------------------
+# Extract all segments (ICBHI + KAUH)
+# -----------------------
+def collect_segments(icbhi_root, icbhi_diag_map, kauh_root):
+    all_segments = []
+    all_labels = []
+
+    print("Processing ICBHI dataset...")
+
+    def icbhi_label_getter(file):
+        patient_id = file.split("_")[0]
+        return icbhi_diag_map.get(patient_id)
+
+    icbhi_segments, icbhi_labels = process_dataset(icbhi_root, icbhi_label_getter)
+
+    print("Processing KAUH dataset...")
+
+    def kauh_label_getter(file):
+        return parse_data_label(file)
+
+    kauh_segments, kauh_labels = process_dataset(kauh_root, kauh_label_getter)
+
+    all_segments = icbhi_segments + kauh_segments
+    all_labels = icbhi_labels + kauh_labels
+
+    return all_segments, all_labels
+
+
+# -----------------------
+# Segment Into Cycles (for ICBHI dataset only)
+# -----------------------
+
+
 def segment_cycles(wav_path: str, sr: int = 16000) -> List[Dict]:
     """
     Segment a respiratory recording into cycles using annotation file.
@@ -151,6 +289,64 @@ def segment_cycles(wav_path: str, sr: int = 16000) -> List[Dict]:
 
     print(f"Segment length: {len(segments)}")
     print("Segment cycles completed.\n")
+    return segments
+
+
+# -----------------------
+# Segment Into Cycles
+# -----------------------
+
+
+def segmentation(
+    wav_path: str, sr: int = 16000, window_length: int = 5, hop_length: float = 2.5
+) -> List[np.ndarray]:
+    """
+    Segment a respiratory recording into fixed-length overlapping windows.
+
+    The parameters contains:
+        wav_path: path to .wav file
+        sr: target sampling rate (default 16kHz)
+        window_length: window size in seconds (default 5s)
+        hop_length: hop size in seconds (default 2.5s, 50% overlap)
+
+    Returns a list of dictionaries containing:
+        List of audio segments (numpy arrays)
+    """
+    # Load audio and resample
+    y, _ = librosa.load(wav_path, sr=sr)
+
+    # Apply bandpass filter
+    y = apply_bandpass(y, sr)
+    print(f"Applied bandpass to file: {wav_path}")
+
+    # Normalize amplitude safely
+    max_val = np.max(np.abs(y))
+    if max_val > 0:
+        y = y / max_val
+    print(f"Normalize the applitude to file: {wav_path}")
+
+    # Convert seconds to samples
+    window_samples = int(window_length * sr)
+    hop_samples = int(hop_length * sr)
+
+    segments = []
+
+    # Slide window across signal
+    for start in range(0, len(y) - window_samples + 1, hop_samples):
+        end = start + window_samples
+        segment = y[start:end]
+
+        if len(segment) < sr:
+            print(f"Segment cycle is less than the sampling rate: {wav_path}")
+            continue
+
+        segments.append(segment.astype(np.float32))
+
+    # If recording is shorter than window_length
+    if len(y) < window_samples:
+        padded = librosa.util.fix_length(y, size=window_samples)
+        segments.append(padded)
+
     return segments
 
 
@@ -259,15 +455,15 @@ def extract_features(
     )
     mel_spec_db = librosa.power_to_db(S=mel_spec)
 
-    # Chroma
-    chroma = librosa.feature.chroma_stft(y=y, sr=sr, hop_length=hop_length)
+    # # Chroma
+    # chroma = librosa.feature.chroma_stft(y=y, sr=sr, hop_length=hop_length)
 
     # MFCC
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc, hop_length=hop_length)
 
     # Resize all to (128, 216)
     mel_resized = cv2.resize(mel_spec_db, (target_width, n_mels))
-    chroma_resized = cv2.resize(chroma, (target_width, n_mels))
+    # chroma_resized = cv2.resize(chroma, (target_width, n_mels))
     mfcc_resize = cv2.resize(mfcc, (target_width, n_mels))
 
     # print(f"Mel Spec DB Shape: {mel_resized.shape}")
@@ -276,18 +472,97 @@ def extract_features(
 
     # Resize or pad all features
     # (ensure same shape for all e.g. (3,128,216))
-    stacked = np.stack([mel_resized, chroma_resized, mfcc_resize], axis=0).astype(
-        np.float32
-    )
+    stacked = np.stack([mel_resized, mfcc_resize], axis=0).astype(np.float32)
 
     # print(f"Final Shape: {stacked.shape}")
     # print(f"Feature Stacked: {stacked}")
     return stacked
 
 
-# # Sample extraction
-# features = extract_features(
-#     "../../dataset/ICBHI_final_database/104_1b1_Al_sc_Litt3200.wav"
-# )
-# print(features)
-# plot_stacked_feature(features)
+TARGET_PER_CLASS = 2000
+
+
+# -----------------------
+# Mild Undersampling
+# -----------------------
+def undersample(X, y):
+    class_indices = defaultdict(list)
+
+    for i, label in enumerate(y):
+        class_indices[label].append(i)
+
+    new_indices = []
+
+    for label, indices in class_indices.items():
+        if label == LABEL_MAP["copd"]:
+            # randomly pick 2000
+            selected = random.sample(indices, TARGET_PER_CLASS)
+            new_indices.extend(selected)
+        else:
+            new_indices.extend(indices)
+
+    random.shuffle(new_indices)
+
+    X_new = [X[i] for i in new_indices]
+    y_new = [y[i] for i in new_indices]
+
+    return X_new, y_new
+
+
+# -----------------------
+# Augmentation Functions
+# -----------------------
+def augment_audio(y, sr=16000):
+
+    choice = random.choice(["stretch", "pitch", "noise", "shift", "volume"])
+
+    if choice == "stretch":
+        y = librosa.effects.time_stretch(y, rate=0.9)
+
+    elif choice == "pitch":
+        step = random.choice([-1, 1])
+        y = librosa.effects.pitch_shift(y, sr=sr, n_steps=step)
+
+    elif choice == "noise":
+        noise = np.random.normal(0, 0.005, len(y))
+        y = y + noise
+
+    elif choice == "shift":
+        shift = int(0.5 * sr)
+        y = np.roll(y, shift)
+
+    elif choice == "volume":
+        scale = random.uniform(0.5, 1.5)
+        y = y * scale
+
+    return y.astype(np.float32)
+
+
+# -----------------------
+# Balance by augmentation
+# -----------------------
+def balance_by_augmentation(X, y):
+    class_indices = defaultdict(list)
+    for i, label in enumerate(y):
+        class_indices[label].append(i)
+
+    X_balanced = list(X)
+    y_balanced = list(y)
+
+    for label, indices in class_indices.items():
+        current_count = len(indices)
+
+        if current_count >= TARGET_PER_CLASS:
+            continue
+
+        needed = TARGET_PER_CLASS - current_count
+
+        print(f"Augmenting label {label} with {needed} samples")
+
+        for _ in range(needed):
+            idx = random.choice(indices)
+            augmented = augment_audio(X[idx])
+            X_balanced.append(augmented)
+            y_balanced.append(label)
+
+    return X_balanced, y_balanced
