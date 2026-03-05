@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 from torch import full
@@ -7,12 +8,17 @@ from lw_cnn_model import LungSoundCNN
 from collections import Counter
 import numpy as np
 from preprocessing import (
+    collect_segments,
+    inject_icbhi_diagnosis,
     segment_cycles,
     load_icbhi_splits,
     load_icbhi_labels,
     build_file_list,
     build_cycle_dataset,
     extract_features,
+    collect_segments,
+    undersample,
+    balance_by_augmentation,
 )
 from typing import List, Dict
 from numpy.typing import NDArray
@@ -39,40 +45,77 @@ LR = 1e-4
 # -----------------------
 ICBHI_SPLITS_PATH = "../distributions/ICBHI_challenge_train_test_split.txt"
 ICBHI_DIAGNOSIS_PATH = "../distributions/ICBHI_challenge_diagnosis.txt"
+KAUH_DATASET_PATH = "../../dataset/KAUH_final_database/Audio Files/"
 ICBHI_DATASET_PATH = "../../dataset/ICBHI_final_database/"
 
 
-def main():
-    train_subjs, test_subjs = load_icbhi_splits(ICBHI_SPLITS_PATH)
+def balance_training_data(X_train, y_train):
 
-    train_subjs, test_subjs = load_icbhi_splits(ICBHI_SPLITS_PATH)
+    print("Original distribution:")
+    print_class_distribution(y_train)
+
+    # Step 1: Undersample COPD
+    X_under, y_under = undersample(X_train, y_train)
+
+    print("After COPD undersampling:")
+    print_class_distribution(y_under)
+
+    # Step 2: Augment minority classes
+    X_bal, y_bal = balance_by_augmentation(X_under, y_under)
+
+    print("Final balanced distribution:")
+    print_class_distribution(y_bal)
+
+    return X_bal, y_bal
+
+
+def print_class_distribution(labels):
+    counter = Counter(labels)
+    for k, v in counter.items():
+        print(f"Class {k}: {v}")
+
+
+def main():
     diag_map = load_icbhi_labels(ICBHI_DIAGNOSIS_PATH)
-    train_files, test_files = build_file_list(
-        ICBHI_DATASET_PATH, train_subjs, test_subjs, diag_map
+    all_segments, all_labels = collect_segments(
+        ICBHI_DATASET_PATH, diag_map, KAUH_DATASET_PATH
     )
 
-    # Build cycle-level dataset
-    train_audio, train_labels = build_cycle_dataset(train_files)
-    test_audio, test_labels = build_cycle_dataset(test_files)
+    # returns balanced segmented samples and labels
+    X, y = balance_training_data(all_segments, all_labels)
 
-    # print("Train distribution:", Counter(train_labels))
-    # print("Test distribution:", Counter(test_labels))
+    # inject_icbhi_diagnosis(diag_map, ICBHI_DATASET_PATH)
 
-    # Extract train and test features
-    print("Feature extracting the train and test independent features...")
+    # train_files, test_files = build_file_list(
+    #     ICBHI_DATASET_PATH, train_subjs, test_subjs, diag_map
+    # )
 
-    train_features = []
-    for i, c in enumerate(train_audio):
-        print(f"[TRAIN {i + 1}/{len(train_audio)}] Extracting: {c}")
-        train_features.append(extract_features(c))
+    # # Build cycle-level dataset
+    # train_audio, train_labels = build_cycle_dataset(train_files)
+    # test_audio, test_labels = build_cycle_dataset(test_files)
+    #
+    # # print("Train distribution:", Counter(train_labels))
+    # # print("Test distribution:", Counter(test_labels))
+    #
+    # # Extract train and test features
+    # print("Feature extracting the train and test independent features...")
+    #
+    # train_features = []
+    # for i, c in enumerate(train_audio):
+    #     print(f"[TRAIN {i + 1}/{len(train_audio)}] Extracting: {c}")
+    #     train_features.append(extract_features(c))
+    #
+    # test_features = []
+    # for i, c in enumerate(test_audio):
+    #     print(f"[TEST {i + 1}/{len(test_audio)}] Extracting: {c}")
+    #     test_features.append(extract_features(c))
+    #
+    # print("Feature extraction completed.\n")
 
-    test_features = []
-    for i, c in enumerate(test_audio):
-        print(f"[TEST {i + 1}/{len(test_audio)}] Extracting: {c}")
-        test_features.append(extract_features(c))
+    # train_model(train_features, train_labels, test_features, test_labels)
 
-    print("Feature extraction completed.\n")
 
+def train_model(train_features, train_labels, test_features, test_labels):
     # Convert to tensors
     X_train = torch.tensor(np.array(train_features)).float()
     y_train = torch.tensor(train_labels).long()
