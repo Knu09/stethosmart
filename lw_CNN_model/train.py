@@ -147,7 +147,7 @@ def train_model(train_features, train_labels, test_features, test_labels):
     # Label encoder
     le = LabelEncoder()
     train_labels = le.fit_transform(train_labels)
-    test_labels = le.fit_transform(test_labels)
+    test_labels = le.transform(test_labels)
 
     # Convert to tensors
     X_train = torch.tensor(np.array(train_features)).float()
