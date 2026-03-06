@@ -89,6 +89,9 @@ def split_data(segments, labels):
 
 
 def main():
+    # NOTE: trigger this method for the first time, then comment it after running python train.py.
+    # inject_icbhi_diagnosis(diag_map, ICBHI_DATASET_PATH)
+
     diag_map = load_icbhi_labels(ICBHI_DIAGNOSIS_PATH)
     all_segments, all_labels = collect_segments(
         ICBHI_DATASET_PATH, diag_map, KAUH_DATASET_PATH
@@ -104,8 +107,6 @@ def main():
     X_train_bal, y_train_bal = balance_training_data(X_train, y_train)
     print("Balanced train size:", len(X_train_bal))
     print("Test size:", len(X_test))
-
-    # inject_icbhi_diagnosis(diag_map, ICBHI_DATASET_PATH)
 
     # train_files, test_files = build_file_list(
     #     ICBHI_DATASET_PATH, train_subjs, test_subjs, diag_map
