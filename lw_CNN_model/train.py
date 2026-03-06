@@ -28,6 +28,8 @@ from numpy.typing import NDArray
 
 import matplotlib.pyplot as plt
 import json
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
 
 # import random
 # import torch
@@ -262,6 +264,48 @@ def train_model(train_features, train_labels, test_features, test_labels):
     print("Model saved!")
 
     epochs = range(1, EPOCHS + 1)
+
+    # -----------------------
+    # CONFUSION MATRIX
+    # -----------------------
+    model.eval()
+
+    all_preds = []
+    all_labels = []
+
+    with torch.no_grad():
+        for X, y in test_loader:
+            X = X.to(device)
+
+            outputs = model(X)
+            _, predicted = torch.max(outputs, 1)
+
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(y.numpy())
+
+    cm = confusion_matrix(all_labels, all_preds)
+    plt.figure(figsize=(8, 6))
+
+    class_names = ["Healthy", "COPD", "Asthma", "Pneumonia"]
+
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        xticklabels=class_names,
+        yticklabels=class_names,
+    )
+
+    plt.xlabel("Predicted Label")
+    plt.ylabel("True Label")
+    plt.title("Confusion Matrix")
+
+    plt.tight_layout()
+    plt.savefig("confusion_matrix.png", dpi=300)
+    plt.close()
+
+    print("Confusion matrix saved!")
 
     # -----------------------
     # Accuracy Plot
