@@ -4,6 +4,9 @@ import torch.nn as nn
 from torch import full
 from torch.utils.data import TensorDataset, DataLoader
 from lw_cnn_model import LungSoundCNN
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from tqdm import tqdm
 
 from collections import Counter
 import numpy as np
@@ -75,14 +78,32 @@ def print_class_distribution(labels):
         print(f"Class {k}: {v}")
 
 
+def split_data(segments, labels):
+    X_train, X_test, y_train, y_test = train_test_split(
+        segments, labels, test_size=0.2, stratify=labels, random_state=42
+    )
+    print(f"Train segments {len(X_train)}")
+    print(f"Test segments {len(X_test)}")
+
+    return X_train, X_test, y_train, y_test
+
+
 def main():
     diag_map = load_icbhi_labels(ICBHI_DIAGNOSIS_PATH)
     all_segments, all_labels = collect_segments(
         ICBHI_DATASET_PATH, diag_map, KAUH_DATASET_PATH
     )
 
+    print("Total segments: ", len(all_segments))
+
+    # Split the dataset
+    X_train, X_test, y_train, y_test = split_data(all_segments, all_labels)
+
+    # Balance training data
     # returns balanced segmented samples and labels
-    X, y = balance_training_data(all_segments, all_labels)
+    X_train_bal, y_train_bal = balance_training_data(X_train, y_train)
+    print("Balanced train size:", len(X_train_bal))
+    print("Test size:", len(X_test))
 
     # inject_icbhi_diagnosis(diag_map, ICBHI_DATASET_PATH)
 
@@ -97,25 +118,36 @@ def main():
     # # print("Train distribution:", Counter(train_labels))
     # # print("Test distribution:", Counter(test_labels))
     #
-    # # Extract train and test features
-    # print("Feature extracting the train and test independent features...")
-    #
-    # train_features = []
-    # for i, c in enumerate(train_audio):
-    #     print(f"[TRAIN {i + 1}/{len(train_audio)}] Extracting: {c}")
+    # Extract train and test features
+    print("Feature extracting the train and test independent features...")
+
+    train_features = []
+    test_features = []
+    # for i, c in enumerate(X_train_bal):
+    #     print(f"[TRAIN {i + 1}/{len(X_train_bal)}] Extracting: {c}")
     #     train_features.append(extract_features(c))
     #
-    # test_features = []
-    # for i, c in enumerate(test_audio):
-    #     print(f"[TEST {i + 1}/{len(test_audio)}] Extracting: {c}")
+    # for i, c in enumerate(X_test):
+    #     print(f"[TEST {i + 1}/{len(X_test)}] Extracting: {c}")
     #     test_features.append(extract_features(c))
-    #
-    # print("Feature extraction completed.\n")
 
-    # train_model(train_features, train_labels, test_features, test_labels)
+    for c in tqdm(X_train_bal, desc="Extracting train features"):
+        train_features.append(extract_features(c))
+
+    for c in tqdm(X_test, desc="Extracting test features"):
+        test_features.append(extract_features(c))
+
+    print("Feature extraction completed.\n")
+
+    train_model(train_features, y_train_bal, test_features, y_test)
 
 
 def train_model(train_features, train_labels, test_features, test_labels):
+    # Label encoder
+    le = LabelEncoder()
+    train_labels = le.fit_transform(train_labels)
+    test_labels = le.fit_transform(test_labels)
+
     # Convert to tensors
     X_train = torch.tensor(np.array(train_features)).float()
     y_train = torch.tensor(train_labels).long()
@@ -151,12 +183,8 @@ def train_model(train_features, train_labels, test_features, test_labels):
     class_counts = Counter(train_labels)
     total_samples = sum(class_counts.values())
 
-    class_counts = np.array(
-        [
-            train_labels.count(i) if train_labels.count(i) > 0 else 1  # avoid zero
-            for i in range(4)
-        ]
-    )
+    class_counts = np.array([max(np.sum(train_labels == i), 1) for i in range(4)])
+
     total_samples = sum(class_counts)
     print(f"Total train samples: {total_samples}")
 
@@ -174,7 +202,9 @@ def train_model(train_features, train_labels, test_features, test_labels):
     train_accuracies = []
     test_accuracies = []
     print("Starting the training loop...")
-    for epoch in range(EPOCHS):
+    epoch_bar = tqdm(range(EPOCHS), desc="Training Progress")
+
+    for epoch in epoch_bar:
         model.train()
         running_loss = 0
         correct = 0
@@ -220,37 +250,41 @@ def train_model(train_features, train_labels, test_features, test_labels):
         train_accuracies.append(train_acc)
         test_accuracies.append(test_acc)
 
-        print(
-            f"Epoch [{epoch + 1}/{EPOCHS}] "
-            f"Loss: {running_loss:.4f} "
-            f"Train Acc: {train_acc:.2f}% "
-            f"Test Acc: {test_acc:.2f}%"
+        epoch_bar.set_postfix(
+            loss=running_loss,
+            train_acc=f"{train_acc:.2f}%",
+            test_acc=f"{test_acc:.2f}%",
         )
 
     # Save model
     torch.save(model.state_dict(), "lung_model.pth")
     print("Model saved!")
+
     epochs = range(1, EPOCHS + 1)
 
-    plt.figure(figsize=(14, 5))
-
-    # Accuracy plot
-    plt.subplot(1, 2, 1)
+    # -----------------------
+    # Accuracy Plot
+    # -----------------------
+    plt.figure(figsize=(8, 5))
     plt.plot(epochs, train_accuracies, label="Train Accuracy")
     plt.plot(epochs, test_accuracies, label="Test Accuracy")
+
     plt.xlabel("Epoch")
     plt.ylabel("Accuracy (%)")
     plt.title("Training vs Test Accuracy")
     plt.legend()
     plt.grid(True)
+
     plt.tight_layout()
-    plt.show()
     plt.savefig("accuracy_plot.png", dpi=300)
     plt.close()
 
-    # Loss plot
-    plt.subplot(1, 2, 2)
+    # -----------------------
+    # Loss Plot
+    # -----------------------
+    plt.figure(figsize=(8, 5))
     plt.plot(epochs, train_losses, label="Training Loss")
+
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Training Loss")
@@ -258,11 +292,8 @@ def train_model(train_features, train_labels, test_features, test_labels):
     plt.grid(True)
 
     plt.tight_layout()
-    plt.show()
-    plt.tight_layout()
     plt.savefig("loss_plot.png", dpi=300)
     plt.close()
-
     metrics = {
         "train_loss": train_losses,
         "train_acc": train_accuracies,
