@@ -479,7 +479,7 @@ def extract_features(
     return stacked
 
 
-TARGET_PER_CLASS = 2000
+TARGET_PER_CLASS = 1000
 
 
 # -----------------------
