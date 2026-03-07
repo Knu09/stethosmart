@@ -259,6 +259,11 @@ def train_model(train_features, train_labels, test_features, test_labels):
             test_acc=f"{test_acc:.2f}%",
         )
 
+    # Save scaler
+    mean = X_train.mean().item()
+    std = X_train.std().item()
+    torch.save({"mean": mean, "std": std}, "scaler.pth")
+
     # Save model
     torch.save(model.state_dict(), "lung_model.pth")
     print("Model saved!")
